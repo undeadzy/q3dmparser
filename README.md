@@ -1,5 +1,5 @@
-Q3DMParse
----------
+Q3DMParse 0.0.1
+===============
 
 Quake 3 demo parser using callbacks.  It is built on ioquake3 without client
 rendering or QVM execution.
@@ -30,13 +30,25 @@ getting output.  While log parsers are fast, there is considerable time needed
 to generate the input.  It can also be problematic running older mod versions
 such as UrT < 4 which was not standalone.
 
+Alternatives
+------------
+
+If you need the quake3 mod/standalone messages from the QVM code, you should
+check out q3dmplayer which is a full ioquake3 client without sound or rendering
+to improve the speed.  For the same 25 minute match, it takes about 30 seconds
+to run through the q3dmplayer rather than parser.  It throws all of the
+output into a sqlite3 database since Com_Printf is unreliable at high
+timescales.
+
 HOWTO
 -----
 
 Add a callback library for your game type.  If you want to access methods from
 ioquake3, you will need to include that code in the library.  Watch out for
 any globals that they refer to.  The callback definition includes pointers to
-cl, clc and cls.
+cl, clc and cls.  These aren't as useful as you would hope though.  The QVM
+code generates the messages and if you want the actual messages, you will
+want to try q3dmplayer rather than this project.
 
 See code/demo_parser/demo_dummy.c for an example
 
