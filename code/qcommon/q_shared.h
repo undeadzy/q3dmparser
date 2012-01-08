@@ -857,8 +857,14 @@ qboolean Info_Validate( const char *s );
 void Info_NextPair( const char **s, char *key, char *value );
 
 // this is only here so the functions in q_shared.c and bg_*.c can link
+#ifdef DEMO_PARSER
+#  include <err.h>
+#  define Com_Printf printf
+#  define Com_Error  errx
+#else
 void	QDECL Com_Error( int level, const char *error, ... ) __attribute__ ((noreturn, format(printf, 2, 3)));
 void	QDECL Com_Printf( const char *msg, ... ) __attribute__ ((format (printf, 1, 2)));
+#endif
 
 
 /*
@@ -922,6 +928,16 @@ struct cvar_s {
 	cvar_t *hashPrev;
 	int			hashIndex;
 };
+
+#ifdef DEMO_PARSER
+// This is a simple alternative to cvar_t which would require
+// adding support for cvar.c.
+//
+// It is currently used by cl_shownet.
+typedef struct {
+	int integer;
+} demo_cvar_t;
+#endif
 
 #define	MAX_CVAR_VALUE_STRING	256
 

@@ -37,6 +37,10 @@ char *svc_strings[256] = {
 	"svc_voip",
 };
 
+#ifdef DEMO_PARSER
+#include "../demo_parser/demo_public.h"
+#endif
+
 void SHOWNET( msg_t *msg, char *s) {
 	if ( cl_shownet->integer >= 2) {
 		Com_Printf ("%3i:%s\n", msg->readcount-1, s);
@@ -221,9 +225,11 @@ void CL_ParseSnapshot( msg_t *msg ) {
 
 	newSnap.serverTime = MSG_ReadLong( msg );
 
+#ifndef DEMO_PARSER
 	// if we were just unpaused, we can only *now* really let the
 	// change come into effect or the client hangs.
 	cl_paused->modified = 0;
+#endif
 
 	newSnap.messageNum = clc.serverMessageSequence;
 
@@ -301,6 +307,17 @@ void CL_ParseSnapshot( msg_t *msg ) {
 		cl.snapshots[oldMessageNum & PACKET_MASK].valid = qfalse;
 	}
 
+#ifdef DEMO_PARSER
+	{
+		demoPluginRegistry_t *current;
+		for (current = demoPluginRegistry; current != NULL; current = current->next) {
+			if (current->plugin->info->preSnapshot != NULL) {
+				current->plugin->info->preSnapshot(current->plugin, &newSnap);
+			}
+		}
+	}
+#endif
+
 	// copy to the current good spot
 	cl.snap = newSnap;
 	cl.snap.ping = 999;
@@ -321,6 +338,17 @@ void CL_ParseSnapshot( msg_t *msg ) {
 	}
 
 	cl.newSnapshots = qtrue;
+
+#ifdef DEMO_PARSER
+	{
+		demoPluginRegistry_t *current;
+		for (current = demoPluginRegistry; current != NULL; current = current->next) {
+			if (current->plugin->info->postSnapshot != NULL) {
+				current->plugin->info->postSnapshot(current->plugin);
+			}
+		}
+	}
+#endif
 }
 
 
@@ -339,6 +367,7 @@ gamestate, and possibly during gameplay.
 ==================
 */
 void CL_SystemInfoChanged( void ) {
+#ifndef DEMO_PARSER
 	char			*systemInfo;
 	const char		*s, *t;
 	char			key[BIG_INFO_KEY];
@@ -351,12 +380,14 @@ void CL_SystemInfoChanged( void ) {
 	// https://zerowing.idsoftware.com/bugzilla/show_bug.cgi?id=475
 	// in some cases, outdated cp commands might get sent with this news serverId
 	cl.serverId = atoi( Info_ValueForKey( systemInfo, "sv_serverid" ) );
+#endif
 
 	// don't set any vars when playing a demo
 	if ( clc.demoplaying ) {
 		return;
 	}
 
+#ifndef DEMO_PARSER
 #ifdef USE_VOIP
 #ifdef LEGACY_PROTOCOL
 	if(clc.compat)
@@ -435,6 +466,7 @@ void CL_SystemInfoChanged( void ) {
 		Cvar_Set( "fs_game", "" );
 	}
 	cl_connectedToPureServer = Cvar_VariableValue( "sv_pure" );
+#endif /* ! DEMO_PARSER */
 }
 
 /*
@@ -444,6 +476,9 @@ CL_ParseServerInfo
 */
 static void CL_ParseServerInfo(void)
 {
+#ifdef DEMO_PARSER
+	clc.sv_allowDownload = 0;
+#else
 	const char *serverInfo;
 
 	serverInfo = cl.gameState.stringData
@@ -454,6 +489,7 @@ static void CL_ParseServerInfo(void)
 	Q_strncpyz(clc.sv_dlURL,
 		Info_ValueForKey(serverInfo, "sv_dlURL"),
 		sizeof(clc.sv_dlURL));
+#endif /* ! DEMO_PARSER */
 }
 
 /*
@@ -468,11 +504,24 @@ void CL_ParseGamestate( msg_t *msg ) {
 	entityState_t	nullstate;
 	int				cmd;
 	char			*s;
+#ifndef DEMO_PARSER
 	char oldGame[MAX_QPATH];
 
 	Con_Close();
+#endif
 
 	clc.connectPacketCount = 0;
+
+#ifdef DEMO_PARSER
+	{
+		demoPluginRegistry_t *current;
+		for (current = demoPluginRegistry; current != NULL; current = current->next) {
+			if (current->plugin->info->preGamestate != NULL) {
+				current->plugin->info->preGamestate(current->plugin);
+			}
+		}
+	}
+#endif
 
 	// wipe local client state
 	CL_ClearState();
@@ -524,14 +573,27 @@ void CL_ParseGamestate( msg_t *msg ) {
 	// read the checksum feed
 	clc.checksumFeed = MSG_ReadLong( msg );
 
+#ifndef DEMO_PARSER
 	// save old gamedir
 	Cvar_VariableStringBuffer("fs_game", oldGame, sizeof(oldGame));
+#endif
 
 	// parse useful values out of CS_SERVERINFO
 	CL_ParseServerInfo();
 
 	// parse serverId and other cvars
 	CL_SystemInfoChanged();
+
+#ifdef DEMO_PARSER
+	{
+		demoPluginRegistry_t *current;
+		for (current = demoPluginRegistry; current != NULL; current = current->next) {
+			if (current->plugin->info->postGamestate != NULL) {
+				current->plugin->info->postGamestate(current->plugin);
+			}
+		}
+	}
+#else
 
 	// stop recording now so the demo won't have an unnecessary level load at the end.
 	if(cl_autoRecordDemo->integer && clc.demorecording)
@@ -552,11 +614,13 @@ void CL_ParseGamestate( msg_t *msg ) {
 
 	// make sure the game starts
 	Cvar_Set( "cl_paused", "0" );
+#endif /* ! DEMO_PARSER */
 }
 
 
 //=====================================================================
 
+#ifndef DEMO_PARSER
 /*
 =====================
 CL_ParseDownload
@@ -652,6 +716,7 @@ void CL_ParseDownload ( msg_t *msg ) {
 		CL_NextDownload ();
 	}
 }
+#endif /* ! DEMO_PARSER */
 
 #ifdef USE_VOIP
 static
@@ -756,6 +821,17 @@ void CL_ParseVoip ( msg_t *msg ) {
 
 	Com_DPrintf("VoIP: packet accepted!\n");
 
+#ifdef DEMO_PARSER
+	{
+		demoPluginRegistry_t *current;
+		for (current = demoPluginRegistry; current != NULL; current = current->next) {
+			if (current->plugin->info->preVoip != NULL) {
+				current->plugin->info->preVoip(current->plugin);
+			}
+		}
+	}
+#endif
+
 	// This is a new "generation" ... a new recording started, reset the bits.
 	if (generation != clc.voipIncomingGeneration[sender]) {
 		Com_DPrintf("VoIP: new generation %d!\n", generation);
@@ -829,6 +905,17 @@ void CL_ParseVoip ( msg_t *msg ) {
 		CL_PlayVoip(sender, written, (const byte *) decoded, flags);
 
 	clc.voipIncomingSequence[sender] = sequence + frames;
+
+#ifdef DEMO_PARSER
+	{
+		demoPluginRegistry_t *current;
+		for (current = demoPluginRegistry; current != NULL; current = current->next) {
+			if (current->plugin->info->postVoip != NULL) {
+				current->plugin->info->postVoip(current->plugin);
+			}
+		}
+	}
+#endif
 }
 #endif
 
@@ -857,6 +944,16 @@ void CL_ParseCommandString( msg_t *msg ) {
 
 	index = seq & (MAX_RELIABLE_COMMANDS-1);
 	Q_strncpyz( clc.serverCommands[ index ], s, sizeof( clc.serverCommands[ index ] ) );
+#ifdef DEMO_PARSER
+	{
+		demoPluginRegistry_t *current;
+		for (current = demoPluginRegistry; current != NULL; current = current->next) {
+			if (current->plugin->info->commandString != NULL) {
+				current->plugin->info->commandString(current->plugin, s);
+			}
+		}
+	}
+#endif
 }
 
 
@@ -913,6 +1010,9 @@ void CL_ParseServerMessage( msg_t *msg ) {
 			Com_Error (ERR_DROP,"CL_ParseServerMessage: Illegible server message");
 			break;			
 		case svc_nop:
+#ifdef DEMO_PARSER
+			Com_Error(ERR_DROP, "Should not hit a download message inside of a demo\n");
+#endif
 			break;
 		case svc_serverCommand:
 			CL_ParseCommandString( msg );
@@ -924,11 +1024,19 @@ void CL_ParseServerMessage( msg_t *msg ) {
 			CL_ParseSnapshot( msg );
 			break;
 		case svc_download:
+#ifdef DEMO_PARSER
+			Com_Error(ERR_DROP, "Should not hit a download message inside of a demo\n");
+#else
 			CL_ParseDownload( msg );
+#endif
 			break;
 		case svc_voip:
 #ifdef USE_VOIP
+#  ifdef DEMO_PARSER
+#    error "VoIP should be supported but it is not yet.  Add CL_ParseVoip + dependencies"
+#  else
 			CL_ParseVoip( msg );
+#  endif
 #endif
 			break;
 		}

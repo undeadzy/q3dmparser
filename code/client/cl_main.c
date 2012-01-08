@@ -24,9 +24,16 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "client.h"
 #include <limits.h>
 
+#ifdef DEMO_PARSER
+// Since we dont't want to bring in the whole cvar.c dependency, use a
+// demo parser specific demo_cvar_t instead and use the same field names/types.
+#define MAX_CVARS 1024
+demo_cvar_t	cvar_indexes[MAX_CVARS];
+demo_cvar_t	*cl_shownet;
 #include "../sys/sys_local.h"
 #include "../sys/sys_loadlib.h"
 
+#else /* ! DEMO_PARSER */
 #ifdef USE_MUMBLE
 #include "libmumblelink.h"
 #endif
@@ -118,9 +125,14 @@ cvar_t	*cl_guidServerUniq;
 
 cvar_t	*cl_consoleKeys;
 
+#endif /* ! DEMO_PARSER */
+
 clientActive_t		cl;
+
 clientConnection_t	clc;
 clientStatic_t		cls;
+
+#ifndef DEMO_PARSER
 vm_t				*cgvm;
 
 // Structure containing functions exported from refresh DLL
@@ -547,6 +559,7 @@ void CL_CaptureVoip(void)
 	}
 }
 #endif
+#endif /* ! DEMO_PARSER */
 
 /*
 =======================================================================
@@ -575,10 +588,16 @@ void CL_AddReliableCommand(const char *cmd, qboolean isDisconnectCmd)
 	if ((isDisconnectCmd && unacknowledged > MAX_RELIABLE_COMMANDS) ||
 	    (!isDisconnectCmd && unacknowledged >= MAX_RELIABLE_COMMANDS))
 	{
+#ifdef DEMO_PARSER
+		// We don't need to worry about com_errorEntered since we
+		// aren't running a client.  As soon as we hit Com_Error, we exit.
+		return;
+#else
 		if(com_errorEntered)
 			return;
 		else
 			Com_Error(ERR_DROP, "Client command overflow");
+#endif
 	}
 
 	Q_strncpyz(clc.reliableCommands[++clc.reliableSequence & (MAX_RELIABLE_COMMANDS - 1)],
@@ -602,6 +621,7 @@ void CL_ChangeReliableCommand( void ) {
 	clc.reliableCommands[ index ][ l+1 ] = '\0';
 }
 
+#ifndef DEMO_PARSER
 /*
 =======================================================================
 
@@ -865,6 +885,7 @@ static float CL_DemoFrameDurationSDev( void )
 
 	return sqrt( variance );
 }
+#endif /* ! DEMO_PARSER */
 
 /*
 =================
@@ -873,6 +894,7 @@ CL_DemoCompleted
 */
 void CL_DemoCompleted( void )
 {
+#ifndef DEMO_PARSER
 	char buffer[ MAX_STRING_CHARS ];
 
 	if( cl_timedemo && cl_timedemo->integer )
@@ -927,8 +949,11 @@ void CL_DemoCompleted( void )
 		}
 	}
 
+#endif /* ! DEMO_PARSER */
 	CL_Disconnect( qtrue );
+#ifndef DEMO_PARSER
 	CL_NextDemo();
+#endif
 }
 
 /*
@@ -943,6 +968,9 @@ void CL_ReadDemoMessage( void ) {
 	int			s;
 
 	if ( !clc.demofile ) {
+#ifdef DEMO_PARSER
+		debug_print("Invalid demo file");
+#endif
 		CL_DemoCompleted ();
 		return;
 	}
@@ -950,6 +978,9 @@ void CL_ReadDemoMessage( void ) {
 	// get the sequence number
 	r = FS_Read( &s, 4, clc.demofile);
 	if ( r != 4 ) {
+#ifdef DEMO_PARSER
+		debug_print("Done with sequence");
+#endif
 		CL_DemoCompleted ();
 		return;
 	}
@@ -984,6 +1015,7 @@ void CL_ReadDemoMessage( void ) {
 	CL_ParseServerMessage( &buf );
 }
 
+#ifndef DEMO_PARSER
 /*
 ====================
 CL_WalkDemoExt
@@ -1068,6 +1100,8 @@ static void CL_CompleteDemoName( char *args, int argNum )
 CL_PlayDemo_f
 
 demo <demoname>
+
+If you make changes to this, it should be kept in sync with CL_ParseDemo
 
 ====================
 */
@@ -1158,8 +1192,65 @@ void CL_PlayDemo_f( void ) {
 	// time from the gamestate load from messing causing a time skip
 	clc.firstDemoFrameSkipped = qfalse;
 }
+#endif /* ! DEMO_PARSER */
 
+#ifdef DEMO_PARSER
+/*
+====================
+CL_ParseDemo
 
+This should be kept in sync with changes to CL_PlayDemo_f
+
+====================
+*/
+qboolean CL_ParseDemo( const char *filename, int verbose ) {
+	char		name[MAX_OSPATH];
+
+	// Specific to CL_ParseDemo.  Reinitialize everything so we can
+	// call this function multiple times.
+	CL_Shutdown("Reinitializing state for demo parser", qtrue, qfalse);
+
+	// This is specific to CL_ParseDemo.  Rather than incorporating
+	// cvar.c and adding cl_shownet, redefine it to a demo_cvar_t.
+	cl_shownet = &cvar_indexes[0];
+	cl_shownet->integer = verbose;
+
+	if ((clc.demofile = fopen(filename, "r")) == NULL) {
+		Com_Printf ("Could not open the file \"%s\"\n", filename);
+		return qfalse;
+	}
+
+	if (!clc.demofile) {
+		Com_Error( ERR_DROP, "couldn't open %s", name);
+		return qfalse;
+	}
+
+	Q_strncpyz( clc.demoName, filename, sizeof( clc.demoName ) );
+
+#ifndef DEMO_PARSER
+	Con_Close();
+#endif
+
+	clc.state = CA_CONNECTED;
+	clc.demoplaying = qtrue;
+	Q_strncpyz( clc.servername, filename, sizeof( clc.servername ) );
+
+#  ifdef LEGACY_PROTOCOL
+	clc.compat = qtrue;
+#  endif
+
+	// read demo messages until connected
+	while ( clc.state >= CA_CONNECTED && clc.state < CA_PRIMED ) {
+		CL_ReadDemoMessage();
+	}
+	// don't get the first snapshot this frame, to prevent the long
+	// time from the gamestate load from messing causing a time skip
+	clc.firstDemoFrameSkipped = qfalse;
+
+	return qtrue;
+}
+
+#else /* ! DEMO_PARSER */
 /*
 ====================
 CL_StartDemoLoop
@@ -1321,6 +1412,7 @@ void CL_MapLoading( void ) {
 		CL_CheckForResend();
 	}
 }
+#endif /* ! DEMO_PARSER */
 
 /*
 =====================
@@ -1336,6 +1428,7 @@ void CL_ClearState (void) {
 	Com_Memset( &cl, 0, sizeof( cl ) );
 }
 
+#ifndef DEMO_PARSER
 /*
 ====================
 CL_UpdateGUID
@@ -1368,6 +1461,7 @@ static void CL_OldGame(void)
 		FS_ConditionalRestart(clc.checksumFeed, qfalse);
 	}
 }
+#endif /* ! DEMO_PARSER */
 
 /*
 =====================
@@ -1380,6 +1474,7 @@ This is also called on Com_Error and Com_Quit, so it shouldn't cause any errors
 =====================
 */
 void CL_Disconnect( qboolean showMainMenu ) {
+#ifndef DEMO_PARSER
 	if ( !com_cl_running || !com_cl_running->integer ) {
 		return;
 	}
@@ -1451,14 +1546,21 @@ void CL_Disconnect( qboolean showMainMenu ) {
 	
 	// Remove pure paks
 	FS_PureServerSetLoadedPaks("", "");
+#else /* ! DEMO_PARSER */
+	if (clc.demofile != NULL && fclose(clc.demofile) != 0) {
+		Com_Error(ERR_DROP, "Cannot close the demo file: %s\n", clc.demoName);
+	}
+	clc.demofile = NULL;
 	
 	CL_ClearState ();
+#endif /* ! DEMO_PARSER */
 
 	// wipe the client connection
 	Com_Memset( &clc, 0, sizeof( clc ) );
 
 	clc.state = CA_DISCONNECTED;
 
+#ifndef DEMO_PARSER
 	// allow cheats locally
 	Cvar_Set( "sv_cheats", "1" );
 
@@ -1483,9 +1585,11 @@ void CL_Disconnect( qboolean showMainMenu ) {
 		CL_OldGame();
 	else
 		noGameRestart = qfalse;
+#endif /* ! DEMO_PARSER */
 }
 
 
+#ifndef DEMO_PARSER
 /*
 ===================
 CL_ForwardCommandToServer
@@ -3640,6 +3744,7 @@ void CL_Init( void ) {
 	Com_Printf( "----- Client Initialization Complete -----\n" );
 }
 
+#endif /* ! DEMO_PARSER */
 
 /*
 ===============
@@ -3651,9 +3756,11 @@ void CL_Shutdown(char *finalmsg, qboolean disconnect, qboolean quit)
 {
 	static qboolean recursive = qfalse;
 	
+#ifndef DEMO_PARSER
 	// check whether the client is running at all.
 	if(!(com_cl_running && com_cl_running->integer))
 		return;
+#endif
 	
 	Com_Printf( "----- Client Shutdown (%s) -----\n", finalmsg );
 
@@ -3663,11 +3770,14 @@ void CL_Shutdown(char *finalmsg, qboolean disconnect, qboolean quit)
 	}
 	recursive = qtrue;
 
+#ifndef DEMO_PARSER
 	noGameRestart = quit;
 
 	if(disconnect)
+#endif
 		CL_Disconnect(qtrue);
 	
+#ifndef DEMO_PARSER
 	CL_ClearMemory(qtrue);
 	CL_Snd_Shutdown();
 
@@ -3699,16 +3809,20 @@ void CL_Shutdown(char *finalmsg, qboolean disconnect, qboolean quit)
 	Con_Shutdown();
 
 	Cvar_Set( "cl_running", "0" );
+#endif /* ! DEMO_PARSER */
 
 	recursive = qfalse;
 
 	Com_Memset( &cls, 0, sizeof( cls ) );
+#ifndef DEMO_PARSER
 	Key_SetCatcher( 0 );
+#endif
 
 	Com_Printf( "-----------------------\n" );
 
 }
 
+#ifndef DEMO_PARSER
 static void CL_SetServerInfo(serverInfo_t *server, const char *info, int ping) {
 	if (server) {
 		if (info) {
@@ -4626,3 +4740,4 @@ qboolean CL_CDKeyValidate( const char *key, const char *checksum ) {
 	return qfalse;
 #endif
 }
+#endif /* ! DEMO_PARSER */

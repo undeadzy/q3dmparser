@@ -1,3 +1,6 @@
+#ifndef IOQ3_CLIENT_H
+#define IOQ3_CLIENT_H 1
+
 /*
 ===========================================================================
 Copyright (C) 1999-2005 Id Software, Inc.
@@ -223,7 +226,11 @@ typedef struct {
 	qboolean	demoplaying;
 	qboolean	demowaiting;	// don't record until a non-delta message is received
 	qboolean	firstDemoFrameSkipped;
+#ifdef DEMO_PARSER
+	FILE		*demofile;
+#else
 	fileHandle_t	demofile;
+#endif
 
 	int			timeDemoFrames;		// counter of rendered frames
 	int			timeDemoStart;		// cls.realtime before first frame
@@ -374,7 +381,11 @@ extern	cvar_t	*cl_noprint;
 extern	cvar_t	*cl_timegraph;
 extern	cvar_t	*cl_maxpackets;
 extern	cvar_t	*cl_packetdup;
+#ifdef DEMO_PARSER
+extern	demo_cvar_t	*cl_shownet;
+#else
 extern	cvar_t	*cl_shownet;
+#endif
 extern	cvar_t	*cl_showSend;
 extern	cvar_t	*cl_timeNudge;
 extern	cvar_t	*cl_showTimeDelta;
@@ -462,6 +473,10 @@ void CL_StartDemoLoop( void );
 void CL_NextDemo( void );
 void CL_ReadDemoMessage( void );
 void CL_StopRecord_f(void);
+
+#ifdef DEMO_PARSER
+qboolean CL_ParseDemo( const char *file, int verbose );
+#endif
 
 void CL_InitDownloads(void);
 void CL_NextDownload(void);
@@ -632,3 +647,4 @@ qboolean CL_VideoRecording( void );
 //
 void CL_WriteDemoMessage ( msg_t *msg, int headerBytes );
 
+#endif /* IOQ3_CLIENT_H */

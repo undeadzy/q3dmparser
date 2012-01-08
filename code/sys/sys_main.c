@@ -31,6 +31,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <ctype.h>
 #include <errno.h>
 
+#ifndef DEMO_PARSER
 #ifndef DEDICATED
 #ifdef USE_LOCAL_HEADERS
 #	include "SDL.h"
@@ -38,6 +39,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #else
 #	include <SDL.h>
 #	include <SDL_cpuinfo.h>
+#endif
 #endif
 #endif
 
@@ -48,7 +50,10 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../qcommon/qcommon.h"
 
 static char binaryPath[ MAX_OSPATH ] = { 0 };
+
+#ifndef DEMO_PARSER
 static char installPath[ MAX_OSPATH ] = { 0 };
+#endif
 
 /*
 =================
@@ -70,6 +75,7 @@ char *Sys_BinaryPath(void)
 	return binaryPath;
 }
 
+#ifndef DEMO_PARSER
 /*
 =================
 Sys_SetDefaultInstallPath
@@ -391,6 +397,7 @@ int Sys_FileTime( char *path )
 
 	return buf.st_mtime;
 }
+#endif /* ! DEMO_PARSER */
 
 /*
 =================
@@ -439,6 +446,7 @@ void *Sys_LoadDll(const char *name, qboolean useSystemLib)
 
 		if(!(dllhandle = Sys_LoadLibrary(libPath)))
 		{
+#ifndef DEMO_PARSER
 			const char *basePath = Cvar_VariableString("fs_basepath");
 			
 			if(!basePath || !*basePath)
@@ -452,6 +460,7 @@ void *Sys_LoadDll(const char *name, qboolean useSystemLib)
 			}
 			
 			if(!dllhandle)
+#endif
 				Com_Printf("Loading \"%s\" failed\n", name);
 		}
 	}
@@ -459,6 +468,7 @@ void *Sys_LoadDll(const char *name, qboolean useSystemLib)
 	return dllhandle;
 }
 
+#ifndef DEMO_PARSER
 /*
 =================
 Sys_LoadGameDll
@@ -644,3 +654,4 @@ int main( int argc, char **argv )
 	return 0;
 }
 
+#endif /* ! DEMO_PARSER */

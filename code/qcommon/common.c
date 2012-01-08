@@ -23,6 +23,12 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "q_shared.h"
 #include "qcommon.h"
+
+#ifdef DEMO_PARSER
+#include <err.h>
+#define Com_Printf printf
+#define Com_Error  errx
+#else
 #include <setjmp.h>
 #ifndef _WIN32
 #include <netinet/in.h>
@@ -3588,3 +3594,4 @@ qboolean Com_IsVoipTarget(uint8_t *voipTargets, int voipTargetsSize, int clientN
 
 	return qfalse;
 }
+#endif /* ! DEMO_PARSER */

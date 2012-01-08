@@ -31,6 +31,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "q_shared.h"
 #include "qcommon.h"
+
+#ifndef DEMO_PARSER
 #include "unzip.h"
 
 /*
@@ -976,6 +978,7 @@ fileHandle_t FS_FCreateOpenPipeFile( const char *filename ) {
 
 	return f;
 }
+#endif /* ! DEMO_PARSER */
 
 /*
 ===========
@@ -1013,6 +1016,7 @@ qboolean FS_FilenameCompare( const char *s1, const char *s2 ) {
 	return qfalse;		// strings are equal
 }
 
+#ifndef DEMO_PARSER
 /*
 ===========
 FS_IsExt
@@ -1486,30 +1490,44 @@ int FS_Read2( void *buffer, int len, fileHandle_t f ) {
 		return FS_Read( buffer, len, f);
 	}
 }
+#endif /* ! DEMO_PARSER */
 
+#ifdef DEMO_PARSER
+int FS_Read( void *buffer, int len, FILE *f ) {
+#else
 int FS_Read( void *buffer, int len, fileHandle_t f ) {
+#endif
 	int		block, remaining;
 	int		read;
 	byte	*buf;
 	int		tries;
 
+#ifndef DEMO_PARSER
 	if ( !fs_searchpaths ) {
 		Com_Error( ERR_FATAL, "Filesystem call made without initialization" );
 	}
+#endif
 
 	if ( !f ) {
 		return 0;
 	}
 
 	buf = (byte *)buffer;
+
+#ifndef DEMO_PARSER
 	fs_readCount += len;
 
 	if (fsh[f].zipFile == qfalse) {
+#endif
 		remaining = len;
 		tries = 0;
 		while (remaining) {
 			block = remaining;
+#ifdef DEMO_PARSER
+			read = fread (buf, 1, block, f);
+#else
 			read = fread (buf, 1, block, fsh[f].handleFiles.file.o);
+#endif
 			if (read == 0) {
 				// we might have been trying to read from a CD, which
 				// sometimes returns a 0 read on windows
@@ -1528,11 +1546,14 @@ int FS_Read( void *buffer, int len, fileHandle_t f ) {
 			buf += read;
 		}
 		return len;
+#ifndef DEMO_PARSER
 	} else {
 		return unzReadCurrentFile(fsh[f].handleFiles.file.z, buffer, len);
 	}
+#endif
 }
 
+#ifndef DEMO_PARSER
 /*
 =================
 FS_Write
@@ -4013,3 +4034,4 @@ const char *FS_GetCurrentGameDir(void)
 
 	return com_basegame->string;
 }
+#endif /* ! DEMO_PARSER */

@@ -32,6 +32,10 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #endif
 #endif
 
+#define debug_print(text) do { \
+	fprintf(stderr, "%s at \"%s\":%d\n", text, __FILE__, __LINE__); \
+} while (0);
+
 //#define	PRE_RELEASE_DEMO
 
 //============================================================================
@@ -657,7 +661,12 @@ int		FS_FileIsInPAK(const char *filename, int *pChecksum );
 int		FS_Write( const void *buffer, int len, fileHandle_t f );
 
 int		FS_Read2( void *buffer, int len, fileHandle_t f );
+
+#ifdef DEMO_PARSER
+int		FS_Read( void *buffer, int len, FILE *f );
+#else
 int		FS_Read( void *buffer, int len, fileHandle_t f );
+#endif
 // properly handles partial reads and reads from other dlls
 
 void	FS_FCloseFile( fileHandle_t f );
@@ -821,9 +830,17 @@ void		Info_Print( const char *s );
 
 void		Com_BeginRedirect (char *buffer, int buffersize, void (*flush)(char *));
 void		Com_EndRedirect( void );
+
+#ifdef DEMO_PARSER
+#include <err.h>
+#define Com_Printf printf
+#define Com_DPrintf printf
+#define Com_Error errx
+#else
 void 		QDECL Com_Printf( const char *fmt, ... ) __attribute__ ((format (printf, 1, 2)));
 void 		QDECL Com_DPrintf( const char *fmt, ... ) __attribute__ ((format (printf, 1, 2)));
 void 		QDECL Com_Error( int code, const char *fmt, ... ) __attribute__ ((noreturn, format(printf, 2, 3)));
+#endif
 void 		Com_Quit_f( void ) __attribute__ ((noreturn));
 void		Com_GameRestart(int checksumFeed, qboolean disconnect);
 

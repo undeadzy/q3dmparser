@@ -1,0 +1,24 @@
+BUILD_STANDALONE = 1
+BUILD_CLIENT     = 0
+BUILD_CLIENT_SMP = 0
+BUILD_SERVER     = 0
+BUILD_GAME_SO    = 0
+BUILD_GAME_QVM   = 0
+BUILD_MISSIONPACK= 0
+
+USE_OPENAL       = 0
+USE_OPENAL_DLOPEN= 0
+USE_CURL         = 0
+USE_CURL_DLOPEN  = 0
+USE_CODEC_VORBIS = 0
+USE_MUMBLE       = 0
+USE_RENDERER_DLOPEN=0
+
+BUILD_DEMO_PARSER= 1
+
+# VOIP should be supported but it is not.
+# Need an example VoIP enabled demo to test with.
+USE_VOIP         = 0
+
+# Verbose
+#V=1

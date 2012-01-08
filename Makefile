@@ -50,6 +50,9 @@ endif
 ifndef BUILD_MISSIONPACK
   BUILD_MISSIONPACK=
 endif
+ifndef BUILD_DEMO_PARSER
+  BUILD_DEMO_PARSER=0
+endif
 
 ifneq ($(PLATFORM),darwin)
   BUILD_CLIENT_SMP = 0
@@ -205,11 +208,16 @@ ifndef USE_OLD_VM64
 USE_OLD_VM64=0
 endif
 
+ifneq ($(BUILD_DEMO_PARSER),0)
+CFLAGS += -DDEMO_PARSER=1
+endif
+
 #############################################################################
 
 BD=$(BUILD_DIR)/debug-$(PLATFORM)-$(ARCH)
 BR=$(BUILD_DIR)/release-$(PLATFORM)-$(ARCH)
 CDIR=$(MOUNT_DIR)/client
+DPDIR=$(MOUNT_DIR)/demo_parser
 SDIR=$(MOUNT_DIR)/server
 RDIR=$(MOUNT_DIR)/renderer
 CMDIR=$(MOUNT_DIR)/qcommon
@@ -267,11 +275,18 @@ ifeq ($(wildcard .svn),.svn)
     USE_SVN=1
   endif
 else
+ifeq ($(wildcard .git/logs/refs/remotes/trunk),.git/logs/refs/remotes/trunk)
+  SVN_REV=$(shell LANG=C tail -n 1 .git/logs/refs/remotes/trunk | awk '{print $$7}' | sed -e 's/^r//')
+   ifneq ($(SVN_REV),)
+     VERSION:=$(VERSION)_SVN$(SVN_REV)
+   endif
+else
 ifeq ($(wildcard .git/svn/.metadata),.git/svn/.metadata)
   SVN_REV=$(shell LANG=C git svn info | awk '$$1 == "Revision:" {print $$2; exit 0}')
   ifneq ($(SVN_REV),)
     VERSION:=$(VERSION)_SVN$(SVN_REV)
   endif
+endif
 endif
 endif
 
@@ -885,6 +900,13 @@ ifneq ($(BUILD_GAME_QVM),0)
   endif
 endif
 
+ifneq ($(BUILD_DEMO_PARSER),0)
+  TARGETS += \
+  $(B)/demo_parser$(FULLBINEXT) \
+  $(B)/demo_dummy_$(SHLIBNAME) \
+  $(B)/demo_silent_$(SHLIBNAME)
+endif
+
 ifeq ($(USE_OPENAL),1)
   CLIENT_CFLAGS += -DUSE_OPENAL
   ifeq ($(USE_OPENAL_DLOPEN),1)
@@ -1148,6 +1170,7 @@ makedirs:
 	@if [ ! -d $(BUILD_DIR) ];then $(MKDIR) $(BUILD_DIR);fi
 	@if [ ! -d $(B) ];then $(MKDIR) $(B);fi
 	@if [ ! -d $(B)/client ];then $(MKDIR) $(B)/client;fi
+	@if [ ! -d $(B)/demo_parser ];then $(MKDIR) $(B)/demo_parser;fi
 	@if [ ! -d $(B)/renderer ];then $(MKDIR) $(B)/renderer;fi
 	@if [ ! -d $(B)/renderersmp ];then $(MKDIR) $(B)/renderersmp;fi
 	@if [ ! -d $(B)/ded ];then $(MKDIR) $(B)/ded;fi
@@ -1924,6 +1947,55 @@ $(B)/$(SERVERBIN)$(FULLBINEXT): $(Q3DOBJ)
 
 
 #############################################################################
+# DEMO PARSER
+#############################################################################
+
+Q3DPOBJ = \
+  $(B)/demo_parser/common.o \
+  $(B)/demo_parser/msg.o \
+  $(B)/demo_parser/huffman.o \
+  $(B)/demo_parser/files.o \
+  $(B)/demo_parser/q_shared.o \
+  \
+  $(B)/demo_parser/cl_main.o \
+  $(B)/demo_parser/cl_parse.o \
+  \
+  $(B)/demo_parser/sys_main.o \
+  \
+  $(B)/demo_parser/demo_registry.o \
+  $(B)/demo_parser/demo_urt_411.o \
+  $(B)/demo_parser/demo_parser.o
+
+# Build UrT 4.1.1 support into demo_parser because it needs access to globals
+# other than cl, clc, cls
+$(B)/demo_parser$(FULLBINEXT): $(Q3DPOBJ)
+	$(Q)$(CC) $(CFLAGS) -DDEMO_PLUGIN_STATIC -o $@ $(Q3DPOBJ) $(LIBS)
+
+# Dummy can be a shared library since it only needs cl, clc, cls
+Q3DPDUMMYOBJ = \
+  $(B)/demo_parser/demo_dummy.o
+
+$(B)/demo_dummy_$(SHLIBNAME): $(Q3DPDUMMYOBJ)
+	$(echo_cmd) "LD $@"
+	$(Q)$(CC) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(Q3DPDUMMYOBJ) \
+		$(LIBS)
+
+# Silent doesn't do anything useful so it can be a shared library
+Q3DPSILENTOBJ = \
+  $(B)/demo_parser/demo_silent.o
+
+$(B)/demo_silent_$(SHLIBNAME): $(Q3DPSILENTOBJ)
+	$(echo_cmd) "LD $@"
+	$(Q)$(CC) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(Q3DPSILENTOBJ) \
+		$(LIBS)
+
+# This gets included in the list of objects
+Q3DPDEMOOBJ = \
+  $(Q3DPOBJ) \
+  $(Q3DPDUMMYOBJ) \
+  $(Q3DPSILENTOBJ)
+
+#############################################################################
 ## BASEQ3 CGAME
 #############################################################################
 
@@ -2265,6 +2337,30 @@ $(B)/renderer/%.o: $(JPDIR)/%.c
 $(B)/renderer/%.o: $(RDIR)/%.c
 	$(DO_REF_CC)
 
+$(B)/demo_parser/%.o: $(CDIR)/%.c
+	$(DO_CC)
+
+$(B)/demo_parser/%.o: $(CMDIR)/%.c
+	$(DO_CC)
+
+$(B)/demo_parser/%.o: $(SYSDIR)/%.c
+	$(DO_CC)
+
+# Need to separate the flags
+$(B)/demo_parser/demo_parser.o: $(DPDIR)/demo_parser.c
+	$(DO_CC)
+
+$(B)/demo_parser/demo_registry.o: $(DPDIR)/demo_registry.c
+	$(DO_CC)
+
+$(B)/demo_parser/demo_urt_411.o: $(DPDIR)/demo_urt_411.c
+	$(DO_CC) -DDEMO_STATIC_PLUGIN=1
+
+$(B)/demo_parser/demo_silent.o: $(DPDIR)/demo_silent.c
+	$(DO_CC)
+
+$(B)/demo_parser/demo_dummy.o: $(DPDIR)/demo_dummy.c
+	$(DO_CC)
 
 $(B)/ded/%.o: $(ASMDIR)/%.s
 	$(DO_AS)
@@ -2389,7 +2485,7 @@ $(B)/$(MISSIONPACK)/qcommon/%.asm: $(CMDIR)/%.c $(Q3LCC)
 # MISC
 #############################################################################
 
-OBJ = $(Q3OBJ) $(Q3POBJ) $(Q3POBJ_SMP) $(Q3ROBJ) $(Q3DOBJ) \
+OBJ = $(Q3OBJ) $(Q3POBJ) $(Q3POBJ_SMP) $(Q3ROBJ) $(Q3DOBJ) $(Q3DPDEMOOBJ) \
   $(MPGOBJ) $(Q3GOBJ) $(Q3CGOBJ) $(MPCGOBJ) $(Q3UIOBJ) $(MPUIOBJ) \
   $(MPGVMOBJ) $(Q3GVMOBJ) $(Q3CGVMOBJ) $(MPCGVMOBJ) $(Q3UIVMOBJ) $(MPUIVMOBJ)
 TOOLSOBJ = $(LBURGOBJ) $(Q3CPPOBJ) $(Q3RCCOBJ) $(Q3LCCOBJ) $(Q3ASMOBJ)
@@ -2425,6 +2521,12 @@ endif
 ifneq ($(BUILD_SERVER),0)
 	@if [ -f $(BR)/$(SERVERBIN)$(FULLBINEXT) ]; then \
 		$(INSTALL) $(STRIP_FLAG) -m 0755 $(BR)/$(SERVERBIN)$(FULLBINEXT) $(COPYBINDIR)/$(SERVERBIN)$(FULLBINEXT); \
+	fi
+endif
+
+ifneq ($(BUILD_DEMO_PARSER),0)
+	@if [ -f $(BR)/demo_parser$(FULLBINEXT) ]; then \
+		$(INSTALL) $(STRIP_FLAG) -m 0755 $(BR)/demo_parser$(FULLBINEXT) $(COPYBINDIR)/demo_parser$(FULLBINEXT); \
 	fi
 endif
 
